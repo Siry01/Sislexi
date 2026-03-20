@@ -29,6 +29,6 @@
     ".next/types/**/*.ts",
     ".next/dev/types/**/*.ts",
     "**/*.mts"
-  ],
+, "app/trabajador/solicitudes/page.jsx", "app/trabajador/solicitudes/page.jsx", "app/trabajador/solicitudes/page.jsx"  ],
   "exclude": ["node_modules"]
 }
