@@ -4,6 +4,12 @@ import { useRouter } from "next/navigation";
 
 export default function Panel() {
   const router = useRouter();
+  // 🚪 CERRAR SESIÓN (SIMPLE Y SEGURO)
+  const handleLogout = () => {
+    localStorage.removeItem("rol");
+    localStorage.removeItem("user");
+    router.push("/login");
+  };
 
   return (
     <div className="container">
@@ -19,9 +25,13 @@ export default function Panel() {
           <h2>SISLEXI</h2>
         </div>
 
-        <button className="logout">
-          🚪 Cerrar sesión
-        </button>
+      {/* 🔥 LOGOUT FUNCIONANDO */}
+        <div className="logout">
+          <button className="btn-logout" onClick={handleLogout}>
+            🚪 Cerrar Sesión
+          </button>
+        </div>
+      
 
       </header>
 
@@ -47,7 +57,7 @@ export default function Panel() {
 
         <div
           className="card"
-          onClick={() => router.push("/chat")}
+          onClick={() => router.push("trabajador/chat")}
         >
           🤖
           <h3>Consultar a LEXI</h3>

@@ -2,7 +2,12 @@
 
 import React, { useState } from "react";
 import Link from "next/link";
-
+ // 🚪 CERRAR SESIÓN (SIMPLE Y SEGURO)
+  const handleLogout = () => {
+    localStorage.removeItem("rol");
+    localStorage.removeItem("user");
+    router.push("/login");
+  };
 export default function Admin() {
   const [activeMenu, setActiveMenu] = useState("estadisticas");
 
@@ -46,8 +51,11 @@ export default function Admin() {
           <li className={`nav-item ${activeMenu === "solicitudes" ? "active" : ""}`} onClick={() => setActiveMenu("solicitudes")}>📂 Todas las Solicitudes</li>
           <li className={`nav-item ${activeMenu === "auditoria" ? "active" : ""}`} onClick={() => setActiveMenu("auditoria")}>🕵️ Auditoría</li>
         </nav>
+       {/* 🔥 LOGOUT FUNCIONANDO */}
         <div className="logout">
-          <Link href="/login"><button className="btn-logout">Cerrar Sesión</button></Link>
+          <button className="btn-logout" onClick={handleLogout}>
+            🚪 Cerrar Sesión
+          </button>
         </div>
       </aside>
 

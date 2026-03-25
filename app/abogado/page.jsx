@@ -1,7 +1,12 @@
 "use client";
 
 import React from "react";
-
+ // 🚪 CERRAR SESIÓN (SIMPLE Y SEGURO)
+  const handleLogout = () => {
+    localStorage.removeItem("rol");
+    localStorage.removeItem("user");
+    router.push("/login");
+  };
 export default function AbogadoPanel() {
   const casos = [
     {
@@ -47,8 +52,11 @@ export default function AbogadoPanel() {
           <li className="nav-item">📂 Archivos Recientes</li>
           <li className="nav-item">💬 Mensajes</li>
         </nav>
+        {/* 🔥 LOGOUT FUNCIONANDO */}
         <div className="logout">
-          <button className="btn-logout">🚪 Cerrar Sesión</button>
+          <button className="btn-logout" onClick={handleLogout}>
+            🚪 Cerrar Sesión
+          </button>
         </div>
       </aside>
 
