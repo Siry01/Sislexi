@@ -1,87 +1,194 @@
 "use client";
 
 import { useState } from "react";
-import { auth, db } from "../lib/firebase";
 import { signInWithEmailAndPassword } from "firebase/auth";
-import { doc, getDoc } from "firebase/firestore";
+import { auth } from "../lib/firebase";
 import { useRouter } from "next/navigation";
 
 export default function Login() {
-  const [correo, setCorreo] = useState("");
-  const [clave, setClave] = useState("");
   const router = useRouter();
+  const [email, setEmail] = useState("");
+  const [clave, setClave] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  const manejarLogin = async () => {
+  const iniciar = async () => {
     try {
-      const userCredential = await signInWithEmailAndPassword(auth, correo, clave);
-      const user = userCredential.user;
-
-      const docRef = doc(db, "usuarios", user.uid);
-      const docSnap = await getDoc(docRef);
-
-      if (docSnap.exists()) {
-        const userData = docSnap.data();
-        const rol = userData.rol;
-
-        // 🔥 PASO CLAVE: Guardamos los datos en localStorage para que el Panel los use
-        localStorage.setItem("rol", rol);
-        localStorage.setItem("user", JSON.stringify({
-          nombre: userData.nombre,
-          apellido: userData.apellido,
-          p00: userData.p00,
-          cedula: userData.cedula
-        }));
-
-        // Redirección según rol
-        if (rol === "administrador") {
-          router.push("/administrador");
-        } else if (rol === "abogado") {
-          router.push("/abogado");
-        } else if (rol === "trabajador") {
-          router.push("/trabajador");
-        } else {
-          alert("Rol no válido");
-        }
-      } else {
-        alert("Usuario no encontrado en la base de datos");
-      }
-    } catch (error) {
-      console.error(error);
-      alert("Error al iniciar sesión: Verifique sus credenciales");
+      setLoading(true);
+      await signInWithEmailAndPassword(auth, email, clave);
+      router.push("/trabajador");
+    } catch (err) {
+      alert("Credenciales incorrectas");
+      setLoading(false);
     }
   };
 
   return (
-    <div className="flex h-screen items-center justify-center bg-blue-900">
-      <div className="bg-white p-8 rounded-2xl shadow-2xl w-96 border-t-4 border-blue-600">
-        <div className="text-center mb-6">
-          <h2 className="text-2xl font-black text-blue-900">SISLEXI AI</h2>
-          <p className="text-gray-500 text-sm">Gestión Legal Inteligente</p>
-        </div>
+    <div className="fondo">
 
-        <div className="space-y-4">
-          <input
-            type="email"
-            placeholder="Correo institucional"
-            className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition"
-            onChange={(e) => setCorreo(e.target.value)}
-          />
+      {/* CARD PRINCIPAL */}
+      <div className="card">
+        <img
+          src="https://images.seeklogo.com/logo-png/18/2/cantv-logo-png_seeklogo-184311.png"
+          className="logo"
+        />
 
-          <input
-            type="password"
-            placeholder="Contraseña"
-            className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition"
-            onChange={(e) => setClave(e.target.value)}
-          />
+        <h1 className="titulo">Bienvenido</h1>
+        <p className="subtitulo">Inicia tu sesión</p>
 
-          <button
-            onClick={manejarLogin}
-            className="w-full bg-blue-700 text-white p-3 rounded-lg font-bold hover:bg-blue-800 transition shadow-lg active:scale-95"
-          >
-            Ingresar al Sistema
-          </button>
-        </div>
+        <input
+          className="input"
+          type="email"
+          placeholder="Correo institucional"
+          onChange={(e) => setEmail(e.target.value)}
+        />
+
+        <input
+          className="input"
+          type="password"
+          placeholder="Contraseña"
+          onChange={(e) => setClave(e.target.value)}
+        />
+
+        <button className="btn" onClick={iniciar}>
+          {loading ? "Ingresando..." : "Ingresar"}
+        </button>
       </div>
+
+      {/* BOTÓN IA */}
+      <div className="ia-btn">
+        <img
+          src="/img/robot.jpg"
+          className="ia-img"
+        />
+        <span className="ia-text">Sislexi AI</span>
+      </div>
+
+      {/* ESTILOS */}
+      <style jsx>{`
+        /* FONDO GENERAL */
+        .fondo {
+          width: 100%;
+          height: 100vh;
+          background: url("https://images.unsplash.com/photo-1614850523011-8f49ffc73908?fm=jpg&q=60&w=3000&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxzZWFyY2h8Mnx8Zm9uZG8lMjBhenVsfGVufDB8fDB8fHww")
+            no-repeat center center/cover;
+          display: flex;
+          justify-content: center;
+          align-items: center;
+          position: relative;
+          overflow: hidden;
+        }
+
+        /* CARD GLASS */
+        .card {
+          width: 90%;
+          max-width: 420px;
+          padding: 35px 30px;
+          border-radius: 20px;
+          background: rgba(255, 255, 255, 0.15);
+          backdrop-filter: blur(18px);
+          -webkit-backdrop-filter: blur(18px);
+          box-shadow: 0 20px 45px rgba(0, 0, 0, 0.25);
+          text-align: center;
+          color: white;
+          animation: fadeUp 0.7s ease;
+        }
+
+        @keyframes fadeUp {
+          from {
+            opacity: 0;
+            transform: translateY(25px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+
+        .logo {
+          width: 65%;
+          margin: 0 auto 15px auto;
+          filter: drop-shadow(0 4px 6px rgba(0,0,0,0.4));
+        }
+
+        .titulo {
+          font-size: 2rem;
+          font-weight: 800;
+          margin-bottom: 5px;
+        }
+
+        .subtitulo {
+          opacity: 0.85;
+          margin-bottom: 25px;
+        }
+
+        .input {
+          width: 100%;
+          padding: 14px;
+          margin-bottom: 14px;
+          border-radius: 10px;
+          background: rgba(255, 255, 255, 0.75);
+          border: none;
+          font-size: 1rem;
+        }
+
+        .btn {
+          width: 100%;
+          padding: 14px;
+          border: none;
+          background: #0f2b7f;
+          color: white;
+          border-radius: 10px;
+          font-size: 1.1rem;
+          font-weight: 600;
+          cursor: pointer;
+        }
+
+        .btn:hover {
+          background: #0b1f66;
+        }
+
+        /* IA BUTTON */
+        .ia-btn {
+          position: absolute;
+          bottom: 25px;
+          right: 25px;
+          background: white;
+          padding: 10px 14px;
+          border-radius: 50px;
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          cursor: pointer;
+          box-shadow: 0 8px 25px rgba(0,0,0,0.25);
+          transition: 0.2s ease;
+        }
+
+        .ia-btn:hover {
+          transform: scale(1.05);
+        }
+
+        .ia-img {
+          width: 40px;
+        }
+
+        .ia-text {
+          font-weight: 700;
+          color: #0f2b7f;
+        }
+
+        @media (max-width: 480px) {
+          .card {
+            padding: 28px 25px;
+          }
+          .titulo {
+            font-size: 1.8rem;
+          }
+          .ia-btn {
+            bottom: 18px;
+            right: 18px;
+          }
+        }
+      `}</style>
     </div>
   );
 }
