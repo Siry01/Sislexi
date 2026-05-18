@@ -1,166 +1,78 @@
 "use client";
+import { useState, useEffect } from "react";
+import { auth, db } from "../../lib/firebase";
+import { updatePassword, EmailAuthProvider, reauthenticateWithCredential } from "firebase/auth";
+import { doc, getDoc } from "firebase/firestore";
+import { useRouter } from "next/navigation";
+import { registrarAuditoriaReal } from "../../lib/auditoria"; // Importación
 
-import { useState, useEffect, useRef, Suspense } from "react";
-import { auth, db } from "../../lib/firebase"; 
-import { collection, query, where, getDocs, doc, getDoc } from "firebase/firestore";
-import { useRouter, useSearchParams } from "next/navigation";
-
-// Necesitamos envolver el contenido en Suspense para usar useSearchParams en Next.js
-function LexiContent() {
-  const [mensajes, setMensajes] = useState([]);
-  const [input, setInput] = useState("");
-  const [pasoActual, setPasoActual] = useState("menu"); 
-  const [mounted, setMounted] = useState(false);
-  const scrollRef = useRef();
+export default function Perfil() {
+  const [userData, setUserData] = useState(null);
+  const [loading, setLoading] = useState(false);
   const router = useRouter();
-  
-  // 🔥 LEER EL TICKET DE LA URL
-  const searchParams = useSearchParams();
-  const ticketUrl = searchParams.get("ticket");
+  const [passwords, setPasswords] = useState({ actual: "", nueva: "", confirmar: "" });
+  const [showPass, setShowPass] = useState({ actual: false, nueva: false, confirmar: false });
 
-  const opcionesFrecuentes = [
-    { id: "estatus", titulo: "📊 Consultar Estatus", descripcion: "Saber cómo va mi trámite actual." },
-    { id: "requisitos", titulo: "📋 Requisitos por Tipo", descripcion: "Qué documentos necesito subir." },
-    { id: "soporte", titulo: "🛠 Soporte Técnico", descripcion: "Problemas con la plataforma Sislexi." },
-    { id: "abogado", titulo: "⚖ Hablar con Abogado", descripcion: "Solicitar asesoría legal directa." }
-  ];
-
-  useEffect(() => {
-    setMounted(true);
-    const user = auth.currentUser;
-    
-    // Saludo inicial
-    const saludoInicial = { 
-      texto: `¡Hola ${user?.displayName || "Trabajador"}! Soy Lexi. ¿En qué puedo ayudarte hoy?`, 
-      tipo: "lexi" 
+  const validarFuerza = (pass) => {
+    return {
+      longitudOk: pass.length >= 10,
+      tieneMayuscula: /[A-Z]/.test(pass),
+      tieneNumero: /[0-9]/.test(pass),
+      tieneEspecial: /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(pass),
     };
-    setMensajes([saludoInicial]);
+  };
 
-    // 🔥 SI HAY TICKET EN LA URL, BUSCARLO AUTOMÁTICAMENTE
-    if (ticketUrl) {
-      buscarTicketAutomatico(ticketUrl);
-    }
-  }, [ticketUrl]);
+  const fuerza = validarFuerza(passwords.nueva);
+  const passValida = fuerza.longitudOk && fuerza.tieneMayuscula && fuerza.tieneNumero && fuerza.tieneEspecial;
 
   useEffect(() => {
-    if (mounted) {
-      scrollRef.current?.scrollIntoView({ behavior: "smooth" });
-    }
-  }, [mensajes, mounted]);
-
-  // FUNCIÓN PARA BUSCAR TICKET DIRECTAMENTE
-  const buscarTicketAutomatico = async (id) => {
-    setMensajes(prev => [...prev, { texto: `Consultando información del caso #${id}...`, tipo: "usuario" }]);
-    
-    try {
-      // Buscamos directamente por el ID del documento (que es el ticket de 6 dígitos)
-      const docRef = doc(db, "solicitudes", id);
-      const docSnap = await getDoc(docRef);
-
-      if (docSnap.exists()) {
-        const s = docSnap.data();
-        setTimeout(() => {
-          setMensajes(prev => [...prev, { 
-            texto: `🤖 He localizado tu caso #${id}. 
-            \n• Trámite: ${s.tipo}
-            \n• Estado: ${s.estado.toUpperCase()}
-            \n• Fecha: ${s.fecha?.toDate().toLocaleDateString()}
-            \n\n¿Deseas hacer alguna otra consulta?`, 
-            tipo: "lexi" 
-          }]);
-        }, 800);
-      } else {
-        setMensajes(prev => [...prev, { texto: `❌ No logré encontrar el ticket #${id} en mis registros.`, tipo: "lexi" }]);
+    const fetchUser = async () => {
+      const user = auth.currentUser;
+      if (user) {
+        const docRef = doc(db, "usuarios", user.uid);
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) setUserData(docSnap.data());
       }
-    } catch (err) {
-      setMensajes(prev => [...prev, { texto: "Error al conectar con la base de datos.", tipo: "lexi" }]);
-    }
-  };
+    };
+    fetchUser();
+  }, []);
 
-  if (!mounted) return null;
-
-  const seleccionarOpcion = (opcion) => {
-    setMensajes(prev => [...prev, { texto: opcion.titulo, tipo: "usuario" }]);
-
-    setTimeout(() => {
-      if (opcion.id === "estatus") {
-        setMensajes(prev => [...prev, { texto: "Por favor, ingresa el ID de tu solicitud para buscarlo en el sistema.", tipo: "lexi" }]);
-        setPasoActual("esperando_estatus");
-      } else if (opcion.id === "requisitos") {
-        setMensajes(prev => [...prev, { texto: "Los requisitos básicos son: Cédula de Identidad (PDF), RIF vigente y el documento de la solicitud. ¿Necesitas saber de un trámite específico?", tipo: "lexi" }]);
-      } else if (opcion.id === "soporte") {
-        setMensajes(prev => [...prev, { texto: "Describe brevemente el problema técnico que presentas.", tipo: "lexi" }]);
-        setPasoActual("esperando_dato");
-      } else if (opcion.id === "abogado") {
-        router.push("/trabajador/solicitudes");
-      }
-    }, 600);
-  };
-
-  const manejarEnvioDato = async (e) => {
+  const handleUpdate = async (e) => {
     e.preventDefault();
-    if (!input.trim()) return;
+    const user = auth.currentUser;
+    const nombreUsuario = userData?.nombre || user.email;
 
-    const dato = input;
-    setInput("");
-    setMensajes(prev => [...prev, { texto: dato, tipo: "usuario" }]);
+    if (passwords.actual === passwords.nueva) return alert("❌ La nueva contraseña no puede ser igual a la actual.");
+    if (passwords.nueva !== passwords.confirmar) return alert("❌ Las contraseñas nuevas no coinciden.");
+    if (!passValida) return alert("❌ La contraseña nueva no cumple con los requisitos.");
 
-    if (pasoActual === "esperando_estatus") {
-      buscarTicketAutomatico(dato);
-    } else {
-      setMensajes(prev => [...prev, { texto: "Entendido, he registrado tu mensaje. ¿Hay algo más en lo que pueda ayudarte?", tipo: "lexi" }]);
+    setLoading(true);
+    try {
+      const credential = EmailAuthProvider.credential(user.email, passwords.actual);
+      await reauthenticateWithCredential(user, credential);
+      await updatePassword(user, passwords.nueva);
+      
+      // AUDITORÍA: Cambio exitoso
+      await registrarAuditoriaReal("Cambio Contraseña", "PERFIL", "success", "Actualización de credenciales de seguridad exitosa", nombreUsuario, "TRABAJADOR");
+      
+      alert("✅ Contraseña actualizada con éxito.");
+      setPasswords({ actual: "", nueva: "", confirmar: "" });
+    } catch (error) {
+      // AUDITORÍA: Intento fallido
+      await registrarAuditoriaReal("Intento Cambio Fallido", "PERFIL", "error", "Clave actual incorrecta al intentar actualizar", nombreUsuario, "TRABAJADOR");
+      alert("❌ Error: La contraseña actual es incorrecta.");
     }
-    setPasoActual("menu");
+    setLoading(false);
   };
+
+  if (!userData) return <div className="cargando">Cargando perfil...</div>;
 
   return (
-    <div className="lexi-container">
-      <header className="lexi-header">
-        <div className="lexi-brand">
-          <div className="lexi-avatar">L</div>
-          <div>
-            <h2>Lexi AI</h2>
-            <span>Asistente Sislexi</span>
-          </div>
-        </div>
-        <button onClick={() => router.push("/trabajador")} className="btn-close">Regresar</button>
-      </header>
-
-      <div className="chat-area">
-        <div className="messages">
-          {mensajes.map((m, i) => (
-            <div key={i} className={`msg-row ${m.tipo}`}>
-              <div className="msg-bubble" style={{ whiteSpace: 'pre-line' }}>{m.texto}</div>
-            </div>
-          ))}
-
-          {pasoActual === "menu" && (
-            <div className="options-grid">
-              {opcionesFrecuentes.map(opc => (
-                <button key={opc.id} className="option-card" onClick={() => seleccionarOpcion(opc)}>
-                  <strong>{opc.titulo}</strong>
-                  <span>{opc.descripcion}</span>
-                </button>
-              ))}
-            </div>
-          )}
-          <div ref={scrollRef} />
-        </div>
-
-        {pasoActual !== "menu" && (
-          <form className="lexi-input" onSubmit={manejarEnvioDato}>
-            <input 
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              placeholder="Escribe aquí..."
-              autoFocus
-            />
-            <button type="submit">Enviar</button>
-            <button type="button" className="btn-cancel" onClick={() => setPasoActual("menu")}>Volver</button>
-          </form>
-        )}
-      </div>
-
+    /* Tu JSX de perfil se mantiene igual */
+    <div className="main-wrapper">...</div>
+  );
+}
+     
       <style jsx>{`
         .lexi-container { height: 100vh; display: flex; flex-direction: column; background: #f0f4f8; font-family: sans-serif; }
         .lexi-header { background: #002d72; color: white; padding: 15px 30px; display: flex; justify-content: space-between; align-items: center; }
@@ -191,15 +103,4 @@ function LexiContent() {
         
         @media (max-width: 600px) { .options-grid { grid-template-columns: 1fr; } }
       `}</style>
-    </div>
-  );
-}
-
-// Exportación principal con Suspense
-export default function ModuloLexi() {
-  return (
-    <Suspense fallback={<div>Cargando Lexi...</div>}>
-      <LexiContent />
-    </Suspense>
-  );
-}
+   

@@ -1,22 +1,46 @@
 "use client";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { registrarAuditoriaReal } from "../lib/auditoria"; // Asegura que la ruta sea correcta
 
 export default function Panel() {
   const router = useRouter();
-  const [userData, setUserData] = useState({ nombre: "Alexander Almaguer" });
+  const [userData, setUserData] = useState({ nombre: "Trabajador" });
 
   useEffect(() => {
     const storedUser = localStorage.getItem("user");
     if (storedUser) {
       try {
         const parsedUser = JSON.parse(storedUser);
-        setUserData({ nombre: parsedUser.nombre || "Alexander Almaguer" });
-      } catch (e) { console.error(e); }
+        const nombre = parsedUser.nombre || "Trabajador";
+        setUserData({ nombre: nombre });
+
+        // AUDITORÍA AUTOMÁTICA: Registro de entrada al panel
+        registrarAuditoriaReal(
+          "Acceso al Panel", 
+          "SISTEMA", 
+          "success", 
+          "El trabajador visualizó el panel principal", 
+          nombre, 
+          "TRABAJADOR"
+        );
+      } catch (e) {
+        console.error("Error al procesar datos del usuario:", e);
+      }
     }
   }, []);
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    // AUDITORÍA: Cierre de sesión real
+    await registrarAuditoriaReal(
+      "Cierre de Sesión", 
+      "SISTEMA", 
+      "success", 
+      "El usuario finalizó su sesión manualmente", 
+      userData.nombre, 
+      "TRABAJADOR"
+    );
+
     localStorage.removeItem("rol");
     localStorage.removeItem("user");
     router.push("/login");
@@ -86,7 +110,7 @@ export default function Panel() {
             </button>
           </div>
           <div className="activity-box">
-            <p>No hay solicitudes recientes para mostrar.</p>
+            <p>Monitoreo de trámites legales activo.</p>
           </div>
         </section>
       </main>
@@ -98,11 +122,10 @@ export default function Panel() {
           padding: 0 5%;
           display: flex;
           flex-direction: column;
-          overflow: hidden; /* Bloquea el scroll para mantenerlo en una pantalla */
-          font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+          overflow: hidden;
+          font-family: 'Segoe UI', Tahoma, sans-serif;
         }
 
-        /* HEADER */
         .topbar {
           height: 90px;
           display: flex;
@@ -114,11 +137,11 @@ export default function Panel() {
         .logo-section {
           display: flex;
           align-items: center;
-          gap: 15px; /* Espacio entre logo y texto */
+          gap: 15px;
         }
 
         .logo-main {
-          height: 55px; /* Logo más grande */
+          height: 55px;
           width: auto;
         }
 
@@ -157,7 +180,6 @@ export default function Panel() {
         .logout-btn:hover { background: #fee2e2; color: #ef4444; }
         .divider { width: 1px; background: #e2e8f0; margin: 8px 5px; }
 
-        /* LAYOUT */
         .main-layout {
           flex-grow: 1;
           display: flex;
@@ -166,7 +188,6 @@ export default function Panel() {
           padding-bottom: 20px;
         }
 
-        /* BANNER */
         .welcome-banner {
           background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%);
           border-radius: 18px;
@@ -198,7 +219,6 @@ export default function Panel() {
           box-shadow: 0 4px 12px rgba(56, 189, 248, 0.4);
         }
 
-        /* CARDS */
         .action-grid {
           display: grid;
           grid-template-columns: 1fr 1fr;
@@ -230,7 +250,6 @@ export default function Panel() {
         .card-content h3 { margin: 0; color: #1e3a8a; font-size: 1.1rem; }
         .card-content p { margin: 2px 0 0; color: #64748b; font-size: 0.85rem; }
 
-        /* LISTA INFERIOR */
         .recent-activity {
           background: white;
           border-radius: 18px;
@@ -256,10 +275,7 @@ export default function Panel() {
           color: #2563eb;
           font-weight: 700;
           cursor: pointer;
-          transition: color 0.2s;
         }
-
-        .view-all-link:hover { color: #1d4ed8; text-decoration: underline; }
 
         .activity-box {
           flex-grow: 1;
@@ -271,12 +287,10 @@ export default function Panel() {
           color: #94a3b8;
         }
 
-        /* AJUSTES RESPONSIVOS */
         @media (max-width: 900px) {
           .container { overflow-y: auto; height: auto; }
           .topbar { flex-direction: column; height: auto; padding: 20px 0; gap: 15px; }
           .action-grid { grid-template-columns: 1fr; height: auto; }
-          .welcome-banner { flex-direction: column; text-align: center; gap: 20px; }
         }
       `}</style>
     </div>

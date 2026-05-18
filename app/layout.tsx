@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import Script from "next/script";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -24,12 +25,22 @@ export default function RootLayout({
 }>) {
   return (
     <html
-      lang="es" // 1. Cambiado a español
-      suppressHydrationWarning // 2. 🔥 Evita el error de hidratación por extensiones o idioma
+      lang="es"
+      suppressHydrationWarning
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
         {children}
+
+        {/* CARGA DE LIBRERÍAS EXTERNAS (FUERA DEL HEAD) */}
+        <Script
+          src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"
+          strategy="afterInteractive"
+        />
+        <Script
+          src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"
+          strategy="afterInteractive"
+        />
       </body>
     </html>
   );

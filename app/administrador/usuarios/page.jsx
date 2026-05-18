@@ -148,12 +148,14 @@ export default function UsuariosLista() {
             <div className="modal-grid">
               <p><strong>Nombre:</strong> {usuarioDetalle.nombre}</p>
               <p><strong>Cédula:</strong> {usuarioDetalle.cedula}</p>
+              <p><strong>Fecha de Nacimiento:</strong> {usuarioDetalle.fechaNac}</p>
               <p><strong>Código P00:</strong> {usuarioDetalle.p00}</p>
               <p><strong>Rol:</strong> <span className="text-capitalize">{usuarioDetalle.rol}</span></p>
               <p><strong>Correo:</strong> {usuarioDetalle.correo}</p>
               <p><strong>Teléfono:</strong> {usuarioDetalle.telefono}</p>
               <p><strong>Cargo:</strong> {usuarioDetalle.cargo}</p>
               <p><strong>Departamento:</strong> {usuarioDetalle.departamento}</p>
+              <p><strong>Sede:</strong> {usuarioDetalle.sede}</p>
               <p><strong>Nacionalidad:</strong> {usuarioDetalle.nacionalidad}</p>
               <p><strong>Fecha Ingreso:</strong> {usuarioDetalle.fechaIngreso}</p>
             </div>
