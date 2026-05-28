@@ -6,6 +6,7 @@ import { registrarAuditoriaReal } from "../lib/auditoria"; // Asegura que la rut
 export default function Panel() {
   const router = useRouter();
   const [userData, setUserData] = useState({ nombre: "Trabajador" });
+  const [tieneNotificaciones, setTieneNotificaciones] = useState(true); // Estado temporal para pruebas visuales
 
   useEffect(() => {
     const storedUser = localStorage.getItem("user");
@@ -60,11 +61,24 @@ export default function Panel() {
         </div>
 
         <div className="user-nav">
+          {/* BANDEJA DE NOTIFICACIONES (CAMPANITA) */}
+          <button className="nav-item notification-btn" onClick={() => router.push("/trabajador/notificaciones")}>
+            <div className="bell-wrapper">
+              <span className="nav-icon">🔔</span>
+              {tieneNotificaciones && <span className="notification-badge"></span>}
+            </div>
+            <span className="nav-text">Notificaciones</span>
+          </button>
+          
+          <div className="divider"></div>
+
           <button className="nav-item profile-btn" onClick={() => router.push("/trabajador/perfil")}>
             <span className="nav-icon">👤</span>
             <span className="nav-text">Mi Perfil</span>
           </button>
+          
           <div className="divider"></div>
+          
           <button className="nav-item logout-btn" onClick={handleLogout}>
             <span className="nav-icon">🚪</span>
             <span className="nav-text">Cerrar Sesión</span>
@@ -79,38 +93,42 @@ export default function Panel() {
             <h1>¡Hola, {userData.nombre}! 👋</h1>
             <p>Sistema de Gestión de Asesorías Legales</p>
           </div>
-          <button className="btn-new-request" onClick={() => router.push("/trabajador/solicitud")}>
-            + Nueva Solicitud
-          </button>
         </section>
 
+        {/* CUADRÍCULA DE MÓDULOS PRINCIPALES (AHORA CON 3 COLUMNAS) */}
         <section className="action-grid">
-          <div className="action-card" onClick={() => router.push("/trabajador/chat")}>
-            <div className="card-icon">🤖</div>
+          <div className="action-card" onClick={() => router.push("/trabajador/solicitudes")}>
+            <div className="card-icon">📂</div>
             <div className="card-content">
-              <h3>Consultar a LEXI</h3>
-              <p>Asistencia legal inteligente</p>
+              <h3>Mis Solicitudes</h3>
+              <p>Historial, estatus y creación de requerimientos</p>
+            </div>
+          </div>
+
+          <div className="action-card" onClick={() => router.push("/trabajador/citas")}>
+            <div className="card-icon">📅</div>
+            <div className="card-content">
+              <h3>Mis Citas Legales</h3>
+              <p>Control de fechas, horarios y reuniones asignadas</p>
             </div>
           </div>
 
           <div className="action-card" onClick={() => router.push("/trabajador/chatabogado")}>
             <div className="card-icon">⚖️</div>
             <div className="card-content">
-              <h3>Chat con Abogado</h3>
-              <p>Comunicación directa</p>
+              <h3>Mensajería</h3>
+              <p>Comunicación directa con tu abogado asignado</p>
             </div>
           </div>
         </section>
 
+        {/* MONITOR DE TRÁMITES RÁPIDOS */}
         <section className="recent-activity">
           <div className="section-header">
-            <h3>📂 Mis Solicitudes</h3>
-            <button className="view-all-link" onClick={() => router.push("/trabajador/solicitudes")}>
-              Ver todas →
-            </button>
+            <h3>📊 Resumen de Actividad</h3>
           </div>
           <div className="activity-box">
-            <p>Monitoreo de trámites legales activo.</p>
+            <p>Monitoreo de trámites legales activo de manera eficiente.</p>
           </div>
         </section>
       </main>
@@ -176,6 +194,24 @@ export default function Panel() {
           transition: all 0.2s ease;
         }
 
+        .bell-wrapper {
+          position: relative;
+          display: flex;
+          align-items: center;
+        }
+
+        .notification-badge {
+          position: absolute;
+          top: -2px;
+          right: -2px;
+          width: 8px;
+          height: 8px;
+          background-color: #ef4444;
+          border-radius: 50%;
+          border: 1px solid white;
+        }
+
+        .notification-btn:hover { background: #f1f5f9; color: #2563eb; }
         .profile-btn:hover { background: #f1f5f9; color: #1e3a8a; }
         .logout-btn:hover { background: #fee2e2; color: #ef4444; }
         .divider { width: 1px; background: #e2e8f0; margin: 8px 5px; }
@@ -202,26 +238,9 @@ export default function Panel() {
         .welcome-text h1 { font-size: 1.8rem; margin: 0; }
         .welcome-text p { opacity: 0.9; margin: 5px 0 0; }
 
-        .btn-new-request {
-          background: #38bdf8;
-          color: #0f172a;
-          border: none;
-          padding: 14px 25px;
-          border-radius: 10px;
-          font-weight: 700;
-          cursor: pointer;
-          transition: 0.2s;
-        }
-
-        .btn-new-request:hover {
-          background: #7dd3fc;
-          transform: translateY(-2px);
-          box-shadow: 0 4px 12px rgba(56, 189, 248, 0.4);
-        }
-
         .action-grid {
           display: grid;
-          grid-template-columns: 1fr 1fr;
+          grid-template-columns: 1fr 1fr 1fr; /* Cambiado a 3 columnas */
           gap: 20px;
           height: 130px;
         }
@@ -231,8 +250,8 @@ export default function Panel() {
           border-radius: 18px;
           display: flex;
           align-items: center;
-          padding: 0 25px;
-          gap: 20px;
+          padding: 0 20px;
+          gap: 15px;
           cursor: pointer;
           border: 1px solid transparent;
           transition: all 0.2s ease;
@@ -268,14 +287,6 @@ export default function Panel() {
         }
 
         .section-header h3 { font-size: 1.1rem; color: #1e3a8a; margin: 0; }
-        
-        .view-all-link {
-          background: none;
-          border: none;
-          color: #2563eb;
-          font-weight: 700;
-          cursor: pointer;
-        }
 
         .activity-box {
           flex-grow: 1;
@@ -287,10 +298,10 @@ export default function Panel() {
           color: #94a3b8;
         }
 
-        @media (max-width: 900px) {
+        @media (max-width: 1024px) {
+          .action-grid { grid-template-columns: 1fr; height: auto; }
           .container { overflow-y: auto; height: auto; }
           .topbar { flex-direction: column; height: auto; padding: 20px 0; gap: 15px; }
-          .action-grid { grid-template-columns: 1fr; height: auto; }
         }
       `}</style>
     </div>

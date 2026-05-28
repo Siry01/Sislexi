@@ -1,312 +1,944 @@
 "use client";
+
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { db, auth } from "../../lib/firebase";
-import { collection, query, where, onSnapshot, doc, updateDoc } from "firebase/firestore";
+import {
+  collection,
+  query,
+  where,
+  onSnapshot,
+  doc,
+  updateDoc,
+} from "firebase/firestore";
 
 export default function MisSolicitudesTrabajador() {
   const router = useRouter();
+
   const [solicitudes, setSolicitudes] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [detalleSolicitud, setDetalleSolicitud] = useState(null);
   const [editandoId, setEditandoId] = useState(null);
-  const [formEdicion, setFormEdicion] = useState({ tipo: "", organismo: "", urgencia: "", telefono: "", descripcion: "" });
   const [guardando, setGuardando] = useState(false);
+  const [formEdicion, setFormEdicion] = useState({
+    tipoRequerimiento: "",
+    descripcion: "",
+    organismoDestino: "",
+    urgencia: "",
+    telefono: "",
+  });
+
+  // Helper para formatear Timestamp a String, o plain string
+  const formatDate = (fecha) => {
+    if (!fecha) return null;
+    if (fecha.toDate) {
+      return fecha.toDate().toLocaleDateString("es-VE");
+    }
+    if (fecha.seconds) {
+      return new Date(fecha.seconds * 1000).toLocaleDateString("es-VE");
+    }
+    try {
+      return new Date(fecha).toLocaleDateString("es-VE");
+    } catch {
+      return String(fecha);
+    }
+  };
 
   useEffect(() => {
     const user = auth.currentUser;
-    
-    const q = query(collection(db, "solicitudes"), where("usuarioId", "==", user?.uid || ""));
+    if (!user) return;
+
+    const q = query(
+      collection(db, "solicitudes"),
+      where("trabajadorUid", "==", user.uid)
+    );
+
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      const docs = snapshot.docs.map(d => {
-        const data = d.data();
-        const fechaNat = data.fecha;
-        const jsDate = fechaNat?.toDate ? fechaNat.toDate() : fechaNat ? new Date(fechaNat) : new Date();
-        
+      const docs = snapshot.docs.map((docu) => {
+        const data = docu.data();
         return {
-          id: d.id,
+          id: docu.id,
           ...data,
-          fechaFormateada: jsDate.toLocaleDateString("es-VE")
+          // Solo fecha de creación y fecha relevante para mostrar en card
+          fechaRegistroFormateada: formatDate(data.fechaRegistro),
+          fechaAceptacionFormateada: formatDate(data.fechaAceptacion),
+          fechaAgendadaFormateada: formatDate(data.fechaAgendada),
+          fechaFinalizacionFormateada: formatDate(data.fechaFinalizacion),
+          fechaRechazoFormateada: formatDate(data.fechaRechazo),
         };
       });
-      docs.sort((a, b) => b.prioridadTopsis - a.prioridadTopsis);
       setSolicitudes(docs);
+      setLoading(false);
     });
 
     return () => unsubscribe();
   }, []);
 
-  const abrirEditor = (sol) => {
-    setEditandoId(sol.id);
+  const abrirEditor = (solicitud) => {
+    setEditandoId(solicitud.id);
     setFormEdicion({
-      tipo: sol.tipo || "",
-      organismo: sol.organismo || "",
-      urgencia: sol.urgencia || "",
-      telefono: sol.telefono || "",
-      descripcion: sol.descripcion || ""
+      tipoRequerimiento: solicitud.tipoRequerimiento || "",
+      descripcion: solicitud.descripcion || "",
+      organismoDestino: solicitud.organismoDestino || "",
+      urgencia: solicitud.urgencia || "",
+      telefono: solicitud.telefono || "",
     });
   };
 
-  const guardarModificacion = async (e) => {
+  const guardarCambios = async (e) => {
     e.preventDefault();
-    setGuardando(true);
     try {
-      const docRef = doc(db, "solicitudes", editandoId);
-      await updateDoc(docRef, { ...formEdicion });
+      setGuardando(true);
+      await updateDoc(doc(db, "solicitudes", editandoId), {
+        ...formEdicion,
+        fechaUltimaActualizacion: new Date(),
+      });
+      alert("Solicitud actualizada");
       setEditandoId(null);
-      alert("Solicitud modificada exitosamente en el sistema.");
-    } catch (error) {
-      console.error("Error al modificar:", error);
+    } catch {
+      alert("Error al actualizar");
     } finally {
       setGuardando(false);
     }
   };
 
+  const verDocumento = (archivo) => {
+    const url = archivo.url || archivo.data;
+    if (url) window.open(url, "_blank", "noopener,noreferrer");
+    else alert("No se encontró URL válida para el documento.");
+  };
+
+  const obtenerNumeroTicket = (ticket) =>
+    ticket ? ticket.replace(/^SISLEXI-/, "") : "";
+
+  const colorEstado = (estado) => {
+    switch ((estado || "").toLowerCase()) {
+      case "pendiente":
+        return "#f59e0b";
+      case "en proceso":
+        return "#2563eb";
+      case "agendada":
+        return "#7c3aed";
+      case "finalizada":
+        return "#16a34a";
+      case "rechazada":
+        return "#dc2626";
+      default:
+        return "#64748b";
+    }
+  };
+
+  // Para mostrar solo la fecha más relevante que se mostrará en la card junto con la creación
+  const getFechaRelevanteCard = (sol) => {
+    if (sol.fechaRechazoFormateada) return sol.fechaRechazoFormateada;
+    if (sol.fechaFinalizacionFormateada) return sol.fechaFinalizacionFormateada;
+    if (sol.fechaAgendadaFormateada) return sol.fechaAgendadaFormateada;
+    if (sol.fechaAceptacionFormateada) return sol.fechaAceptacionFormateada;
+    return null;
+  };
+
   return (
-    <div className="container-solicitudes">
+    <div className="container">
+      {/* HEADER */}
       <header className="topbar">
-        <div className="logo-section">
-          <img src="https://images.seeklogo.com/logo-png/18/2/cantv-logo-png_seeklogo-184311.png" className="logo-main" alt="CANTV" />
-          <h2 className="brand-title">SISLEXI</h2>
+        <div className="brand">
+          <img src="/can.png" alt="Sislexi" className="logo" />
+          <div>
+            <h1>SISLEXI</h1>
+            <p>Sistema Inteligente de Asesorías Legales</p>
+          </div>
         </div>
-        <button className="btn-volver" onClick={() => router.push("/trabajador")}>
-          🚪 Volver al Menú
-        </button>
+        <div className="top-buttons">
+          <button className="btn-back" onClick={() => router.push("/trabajador")}>
+            ← Volver
+          </button>
+          <button
+            className="btn-primary"
+            onClick={() => router.push("/trabajador/solicitud")}
+          >
+            + Nueva Solicitud
+          </button>
+        </div>
       </header>
 
-      <main className="main-layout">
-        <div className="section-title">
-          <h2>📂 Historial de Requerimientos Legales</h2>
-          <p>Consulte el estatus de sus trámites, interactúe con el abogado asignado o modifique registros en espera.</p>
-        </div>
-
-        {/* MODAL DE EDICIÓN */}
-        {editandoId && (
-          <div className="modal-overlay">
-            <div className="modal-edit-card">
-              <h3>📝 Modificar Registro de Solicitud</h3>
-              <form onSubmit={guardarModificacion} className="edit-form-layout">
-                <div className="edit-group">
-                  <label>TIPO DE TRÁMITE</label>
-                  <select value={formEdicion.tipo} onChange={(e) => setFormEdicion({...formEdicion, tipo: e.target.value})} required>
-                    <option value="Amparo Constitucional">Amparo Constitucional</option>
-                    <option value="Reclamación Colectiva LOTTT">Reclamación Colectiva LOTTT</option>
-                    <option value="Impugnación de Actas">Impugnación de Actas</option>
-                    <option value="Revisión de Contrato / Convenio">Revisión de Contrato / Convenio</option>
-                    <option value="Asesoría Jurídica General">Asesoría Jurídica General</option>
-                  </select>
-                </div>
-                <div className="edit-group">
-                  <label>ORGANISMO DESTINO</label>
-                  <input type="text" value={formEdicion.organismo} onChange={(e) => setFormEdicion({...formEdicion, organismo: e.target.value})} required />
-                </div>
-                <div className="edit-group">
-                  <label>URGENCIA</label>
-                  <select value={formEdicion.urgencia} onChange={(e) => setFormEdicion({...formEdicion, urgencia: e.target.value})} required>
-                    <option value="Baja">Baja</option>
-                    <option value="Alta">Alta</option>
-                  </select>
-                </div>
-                <div className="edit-group">
-                  <label>TELÉFONO</label>
-                  <input type="tel" value={formEdicion.telefono} onChange={(e) => setFormEdicion({...formEdicion, telefono: e.target.value})} required />
-                </div>
-                <div className="edit-group full-width">
-                  <label>DESCRIPCIÓN DETALLADA</label>
-                  <textarea value={formEdicion.descripcion} onChange={(e) => setFormEdicion({...formEdicion, descripcion: e.target.value})} required></textarea>
-                </div>
-                <div className="modal-actions-row">
-                  <button type="button" className="btn-cancel" onClick={() => setEditandoId(null)}>Cancelar</button>
-                  <button type="submit" className="btn-save-confirm" disabled={guardando}>
-                    {guardando ? "Actualizando..." : "Guardar Cambios"}
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-        )}
-
-        {/* LISTADO DE TARJETAS */}
-        <div className="solicitudes-grid">
-          {solicitudes.length > 0 ? solicitudes.map((sol) => {
-            const estadoLimpio = (sol.estado || "pendiente").toLowerCase();
-            const esCritico = (sol.prioridadTopsis || 0) >= 75;
-            const tieneAbogado = !!sol.abogadoUid;
+      {/* GRID */}
+      <div className="grid">
+        {loading ? (
+          <p>Cargando solicitudes...</p>
+        ) : solicitudes.length === 0 ? (
+          <div className="empty">No tienes solicitudes registradas.</div>
+        ) : (
+          solicitudes.map((sol) => {
+            const estadoMinus = (sol.estado || "").toLowerCase();
+            const cerrado =
+              estadoMinus === "finalizada" || estadoMinus === "rechazada";
+            const fechaRelevante = getFechaRelevanteCard(sol);
 
             return (
-              <div key={sol.id} className="solicitud-card">
-                <div className="card-header-meta">
-                  <span className="ticket-badge">🎫 Ticket #{sol.idTicket}</span>
-                  <span className={`topsis-pill ${esCritico ? "critico" : "normal"}`}>
-                    🎯 TOPSIS: {sol.prioridadTopsis || 20}%
+              <div key={sol.id} className={`card ${cerrado ? "cerrado" : ""}`}>
+                <div className="card-header">
+                  <h3>
+                    🎫 Número de Ticket:{" "}
+                    <strong>{obtenerNumeroTicket(sol.ticket)}</strong>
+                  </h3>
+                  <span
+                    className="estado"
+                    style={{ background: colorEstado(sol.estado) }}
+                  >
+                    {sol.estado}
                   </span>
                 </div>
-                
-                <div className="card-body">
-                  <h4>{sol.tipo}</h4>
-                  <p className="txt-date">📅 Registrado el: {sol.fechaFormateada}</p>
-                  <p className="txt-organismo">🏢 Destino: <strong>{sol.organismo}</strong></p>
-                  
-                  <div className="descripcion-caso-box">
-                    <p>"{sol.descripcion}"</p>
-                  </div>
 
-                  {/* 📂 SECCIÓN DE ARCHIVOS ADJUNTOS CON APERTURA DINÁMICA */}
-                  <div className="attachments-wrapper">
-                    <span className="attachments-title">📎 Documentación Adjunta:</span>
-                    {sol.urlsArchivos && sol.urlsArchivos.length > 0 ? (
-                      <div className="files-container-list">
-                        {sol.urlsArchivos.map((archivo, idx) => (
-                          <a 
-                            key={idx} 
-                            href={archivo.url} 
-                            target="_blank" 
-                            rel="noopener noreferrer" 
-                            className="file-download-link-card"
-                            title="Presione para abrir este documento en una pestaña nueva"
-                          >
-                            <span className="file-icon-mini">📄</span>
-                            <span className="file-name-truncate">{archivo.nombre}</span>
-                            <span className="open-eye-icon">👁️</span>
-                          </a>
-                        ))}
-                      </div>
-                    ) : sol.nombresArchivos && sol.nombresArchivos.length > 0 ? (
-                      /* Respaldo por si hay documentos viejos cargados sin URL de objeto */
-                      <div className="files-container-list">
-                        {sol.nombresArchivos.map((nombre, idx) => (
-                          <div key={idx} className="file-download-link-card disabled-file">
-                            <span className="file-icon-mini">📄</span>
-                            <span className="file-name-truncate">{nombre}</span>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <span className="no-files-txt">Ningún archivo digital cargado para este caso.</span>
-                    )}
-                  </div>
+                <h2>{sol.tipoRequerimiento}</h2>
+                <p className="priority">
+                  ⚖ Prioridad: <strong>{sol.prioridadAHP}%</strong>
+                </p>
+                <p>
+                  🚨 Urgencia: <strong>{sol.urgencia}</strong>
+                </p>
+                <p>📅 Creación: {sol.fechaRegistroFormateada || "Sin fecha"}</p>
+                {fechaRelevante && (
+                  <p>🕒 Fecha relevante: {fechaRelevante}</p>
+                )}
+                <p className="description">{sol.descripcion}</p>
 
-                  {/* INDICADOR DE ABOGADO ASIGNADO */}
-                  {tieneAbogado ? (
-                    <div className="abogado-asignado-alert-box">
-                      <div className="abogado-profile-avatar">🧑‍⚖️</div>
-                      <div className="abogado-name-info">
-                        <span>Caso tomado por el especialista:</span>
-                        <strong>{sol.firmaAbogadoNombre || "Consultor Jurídico"}</strong>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="espera-analista-box">
-                      ⏳ Esperando asignación de especialista por Gestión Humana...
-                    </div>
+                {sol.tieneAbogado && sol.abogadoNombre && (
+                  <div className="lawyer-box">
+                    👨‍⚖️ Abogado: <strong>{sol.abogadoNombre}</strong>
+                  </div>
+                )}
+
+                {estadoMinus === "finalizada" && sol.veredictoFinal && (
+                  <div className="veredicto-box">
+                    <h4>⚖ Veredicto Final</h4>
+                    <p>{sol.veredictoFinal}</p>
+                  </div>
+                )}
+
+                {estadoMinus === "rechazada" && sol.motivoRechazo && (
+                  <div className="rechazo-box">
+                    <h4>❌ Motivo de Rechazo</h4>
+                    <p>{sol.motivoRechazo}</p>
+                  </div>
+                )}
+
+                {sol.documentosAdjuntos?.length > 0 && (
+                  <div className="docs-container">
+                    <h4>📂 Documentos</h4>
+                    {sol.documentosAdjuntos.map((doc, i) => (
+                      <button
+                        key={i}
+                        className="doc-btn"
+                        onClick={() => verDocumento(doc)}
+                      >
+                        📄 {doc.nombre}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                <div className="actions">
+                  <button
+                    className="btn-details"
+                    onClick={() => setDetalleSolicitud(sol)}
+                  >
+                    Ver Detalles
+                  </button>
+                  {estadoMinus === "pendiente" && (
+                    <button
+                      className="btn-edit"
+                      onClick={() => abrirEditor(sol)}
+                    >
+                      Modificar
+                    </button>
                   )}
-                  
-                  <div className="status-container-footer">
-                    <div className="status-info-left">
-                      <span className="lbl-status">Estatus:</span>
-                      <span className={`status-badge ${estadoLimpio}`}>
-                        {sol.estado || "Pendiente"}
-                      </span>
-                    </div>
 
-                    <div className="actions-buttons-wrapper">
-                      {estadoLimpio === "pendiente" ? (
-                        <button className="btn-interactive-action btn-modify" onClick={() => abrirEditor(sol)}>
-                          Editar Solicitud 📝
-                        </button>
-                      ) : (
-                        tieneAbogado && (
-                          <button className="btn-interactive-action btn-chat" onClick={() => router.push(`/trabajador/chat/${sol.abogadoUid}`)}>
-                            Iniciar Chat Jurídico 💬
-                          </button>
-                        )
-                      )}
-                    </div>
-                  </div>
+                  {sol.tieneAbogado &&
+                    !cerrado && (
+                      <button
+                        className="btn-chat"
+                        onClick={() => alert("Chat próximamente")}
+                      >
+                        Chat
+                      </button>
+                    )}
                 </div>
               </div>
             );
-          }) : (
-            <div className="empty-state">📭 No posee solicitudes registradas actualmente en la plataforma.</div>
-          )}
+          })
+        )}
+      </div>
+
+      {/* MODAL DETALLES */}
+      {detalleSolicitud && (
+        <div className="overlay">
+          <div className="modal">
+            <h2>🎫 Número de Ticket: {obtenerNumeroTicket(detalleSolicitud.ticket)}</h2>
+            <h3>{detalleSolicitud.tipoRequerimiento}</h3>
+
+            <p>
+              <strong>Estado:</strong> {detalleSolicitud.estado}
+            </p>
+
+            <p>
+              <strong>Organismo:</strong> {detalleSolicitud.organismoDestino}
+            </p>
+
+            <p>
+              <strong>Urgencia:</strong> {detalleSolicitud.urgencia}
+            </p>
+
+            <p>
+              <strong>Descripción:</strong>
+            </p>
+            <div className="detail-box">{detalleSolicitud.descripcion}</div>
+
+            {/* Mostrar Abogado */}
+            {detalleSolicitud.tieneAbogado && detalleSolicitud.abogadoNombre && (
+              <p>
+                <strong>Abogado:</strong> {detalleSolicitud.abogadoNombre}
+              </p>
+            )}
+
+            {/* Mostrar TODAS las fechas relevantes */}
+            {detalleSolicitud.fechaRegistro && (
+              <p>
+                📅 Fecha de creación:{" "}
+                {formatDate(detalleSolicitud.fechaRegistro)}
+              </p>
+            )}
+            {detalleSolicitud.fechaAceptacion && (
+              <p>
+                ✅ Fecha de aceptación:{" "}
+                {formatDate(detalleSolicitud.fechaAceptacion)}
+              </p>
+            )}
+            {detalleSolicitud.fechaAgendada && (
+              <p>
+                📆 Fecha agendada:{" "}
+                {formatDate(detalleSolicitud.fechaAgendada)}
+              </p>
+            )}
+            {detalleSolicitud.fechaFinalizacion && (
+              <p>
+                🏁 Fecha finalización:{" "}
+                {formatDate(detalleSolicitud.fechaFinalizacion)}
+              </p>
+            )}
+            {detalleSolicitud.fechaRechazo && (
+              <p>
+                ❌ Fecha rechazo: {formatDate(detalleSolicitud.fechaRechazo)}
+              </p>
+            )}
+
+            {/* Veredicto o motivo */}
+            {detalleSolicitud.estado?.toLowerCase() === "finalizada" &&
+              detalleSolicitud.veredictoFinal && (
+                <>
+                  <h4>⚖ Veredicto Final</h4>
+                  <div className="veredicto-box">{detalleSolicitud.veredictoFinal}</div>
+                </>
+              )}
+
+            {detalleSolicitud.estado?.toLowerCase() === "rechazada" &&
+              detalleSolicitud.motivoRechazo && (
+                <>
+                  <h4>❌ Motivo de Rechazo</h4>
+                  <div className="rechazo-box">{detalleSolicitud.motivoRechazo}</div>
+                </>
+              )}
+
+            <button className="btn-close" onClick={() => setDetalleSolicitud(null)}>
+              Cerrar
+            </button>
+          </div>
         </div>
-      </main>
+      )}
 
+      {/* MODAL EDITAR */}
+      {editandoId && (
+        <div className="overlay">
+          <div className="modal">
+            <h2>Editar Solicitud</h2>
+            <form onSubmit={guardarCambios} className="form">
+              <input
+                type="text"
+                placeholder="Tipo de requerimiento"
+                value={formEdicion.tipoRequerimiento}
+                onChange={(e) =>
+                  setFormEdicion({ ...formEdicion, tipoRequerimiento: e.target.value })
+                }
+              />
+              <input
+                type="text"
+                placeholder="Organismo destino"
+                value={formEdicion.organismoDestino}
+                onChange={(e) =>
+                  setFormEdicion({ ...formEdicion, organismoDestino: e.target.value })
+                }
+              />
+              <select
+                value={formEdicion.urgencia}
+                onChange={(e) =>
+                  setFormEdicion({ ...formEdicion, urgencia: e.target.value })
+                }
+              >
+                <option value="">Seleccione</option>
+                <option value="Baja">Baja</option>
+                <option value="Media">Media</option>
+                <option value="Alta">Alta</option>
+              </select>
+              <input
+                type="text"
+                placeholder="Teléfono"
+                value={formEdicion.telefono}
+                onChange={(e) =>
+                  setFormEdicion({ ...formEdicion, telefono: e.target.value })
+                }
+              />
+              <textarea
+                rows="5"
+                placeholder="Descripción"
+                value={formEdicion.descripcion}
+                onChange={(e) =>
+                  setFormEdicion({ ...formEdicion, descripcion: e.target.value })
+                }
+              />
+              <div className="actions-form">
+                <button
+                  type="button"
+                  className="btn-cancel"
+                  onClick={() => setEditandoId(null)}
+                >
+                  Cancelar
+                </button>
+                <button type="submit" className="btn-save" disabled={guardando}>
+                  {guardando ? "Guardando..." : "Guardar"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+     
       <style jsx>{`
-        .container-solicitudes { min-height: 100vh; background-color: #f4f6f9; padding: 0 4%; display: flex; flex-direction: column; font-family: 'Inter', sans-serif; letter-spacing: -0.15px; }
-        .topbar { height: 85px; display: flex; justify-content: space-between; align-items: center; min-height: 85px; }
-        .logo-section { display: flex; align-items: center; gap: 12px; }
-        .logo-main { height: 45px; }
-        .brand-title { color: #002d72; font-size: 1.4rem; font-weight: 900; margin: 0; }
-        .btn-volver { padding: 9px 20px; border-radius: 10px; border: 1px solid #cbd5e1; background: white; cursor: pointer; font-weight: 700; color: #475569; font-size: 0.85rem; }
-        
-        .main-layout { flex-grow: 1; display: flex; flex-direction: column; gap: 20px; padding-bottom: 40px; }
-        .section-title { text-align: left; margin-top: 10px; }
-        .section-title h2 { margin: 0; color: #0f172a; font-weight: 800; font-size: 1.4rem; }
-        .section-title p { margin: 4px 0 0; color: #64748b; font-size: 0.85rem; }
+        .container {
+          min-height: 100vh;
+          background: #f0f4f9;
+          padding: 30px;
+          font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+          color: #1e293b;
+        }
 
-        .solicitudes-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(380px, 1fr)); gap: 20px; }
-        .solicitud-card { background: white; border-radius: 20px; padding: 22px; border: 1px solid #e2e8f0; display: flex; flex-direction: column; gap: 15px; text-align: left; box-shadow: 0 4px 10px rgba(0,0,0,0.01); }
-        
-        .card-header-meta { display: flex; justify-content: space-between; align-items: center; }
-        .ticket-badge { font-family: monospace; font-size: 0.8rem; font-weight: 700; color: #334155; background: #f1f5f9; padding: 4px 10px; border-radius: 6px; }
-        .topsis-pill { font-size: 0.75rem; font-weight: 800; padding: 4px 10px; border-radius: 6px; }
-        .topsis-pill.critico { background: #fee2e2; color: #b91c1c; border: 1px solid #fca5a5; }
-        .topsis-pill.normal { background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; }
+        .topbar {
+          background: #004a99;
+          border-radius: 20px;
+          padding: 25px 30px;
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-bottom: 30px;
+          color: #fff;
+          box-shadow: 0 4px 20px rgba(0, 74, 153, 0.3);
+        }
 
-        .card-body h4 { margin: 0 0 4px; color: #002d72; font-size: 1.1rem; font-weight: 800; }
-        .txt-date { margin: 0; color: #94a3b8; font-size: 0.75rem; font-weight: 600; }
-        .txt-organismo { margin: 5px 0 0 0; color: #475569; font-size: 0.82rem; }
-        .descripcion-caso-box { background: #f8fafc; border: 1px solid #f1f5f9; padding: 12px; border-radius: 12px; margin-top: 8px; font-style: italic; color: #334155; font-size: 0.85rem; line-height: 1.4; }
+        .brand {
+          display: flex;
+          gap: 20px;
+          align-items: center;
+        }
 
-        /* REESTRUCTURACIÓN DE ADJUNTOS COMO ENLACES REALES */
-        .attachments-wrapper { display: flex; flex-direction: column; gap: 6px; margin-top: 5px; }
-        .attachments-title { font-size: 0.72rem; font-weight: 800; color: #475569; text-transform: uppercase; letter-spacing: 0.3px; }
-        .files-container-list { display: flex; flex-wrap: wrap; gap: 6px; }
-        
-        .file-download-link-card { text-decoration: none; background: #f1f5f9; border: 1px solid #cbd5e1; padding: 6px 14px; border-radius: 8px; display: flex; align-items: center; gap: 8px; max-width: 100%; box-sizing: border-box; cursor: pointer; transition: all 0.2s ease; }
-        .file-download-link-card:hover { background: #e2e8f0; border-color: #002d72; }
-        .disabled-file { cursor: not-allowed; opacity: 0.6; }
-        
-        .file-icon-mini { font-size: 0.85rem; }
-        .file-name-truncate { font-size: 0.78rem; font-weight: 700; color: #1e293b; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 180px; }
-        .open-eye-icon { font-size: 0.78rem; color: #002d72; font-weight: bold; margin-left: 2px; }
-        .no-files-txt { font-size: 0.78rem; color: #94a3b8; font-style: italic; }
+        .logo {
+          width: 70px;
+          filter: drop-shadow(0 0 6px #ffd700);
+        }
 
-        .abogado-asignado-alert-box { display: flex; align-items: center; gap: 12px; background: #f0fdf4; border: 1px solid #bbf7d0; padding: 10px 14px; border-radius: 12px; margin-top: 5px; }
-        .abogado-profile-avatar { font-size: 1.3rem; }
-        .abogado-name-info { display: flex; flex-direction: column; text-align: left; }
-        .abogado-name-info span { font-size: 0.7rem; color: #166534; font-weight: 600; }
-        .abogado-name-info strong { font-size: 0.82rem; color: #14532d; font-weight: 800; }
-        .espera-analista-box { font-size: 0.78rem; color: #64748b; font-style: italic; background: #f8fafc; padding: 8px 12px; border-radius: 10px; border: 1px dashed #cbd5e1; }
+        .brand h1 {
+          font-size: 2rem;
+          font-weight: 900;
+          margin: 0;
+          color: #ffd700;
+          text-shadow: 1px 1px 6px #ffaa00;
+        }
 
-        .status-container-footer { display: flex; align-items: center; justify-content: space-between; border-top: 1px dashed #e2e8f0; padding-top: 14px; margin-top: 5px; gap: 10px; }
-        .status-info-left { display: flex; align-items: center; gap: 6px; }
-        .lbl-status { font-size: 0.75rem; font-weight: 800; color: #64748b; }
-        .status-badge { font-size: 0.75rem; font-weight: 800; padding: 4px 10px; border-radius: 6px; text-transform: uppercase; }
-        .status-badge.pendiente { background: #fffbeb; color: #d97706; border: 1px solid #fde68a; }
-        .status-badge.proceso { background: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd; }
-        .status-badge.finalizado { background: #dcfce7; color: #15803d; border: 1px solid #bbf7d0; }
+        .brand p {
+          margin: 0;
+          font-weight: 600;
+          font-size: 1rem;
+          color: #e0e0e0;
+        }
 
-        .btn-interactive-action { border: none; padding: 8px 14px; border-radius: 8px; font-weight: 700; font-size: 0.78rem; cursor: pointer; transition: 0.2s; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
-        .btn-modify { background: white; color: #002d72; border: 1px solid #002d72; }
-        .btn-modify:hover { background: #f0f4fa; }
-        .btn-chat { background: #002d72; color: white; }
-        .btn-chat:hover { background: #001a45; }
+        .top-buttons {
+          display: flex;
+          gap: 12px;
+        }
 
-        .modal-overlay { position: fixed; inset: 0; background: rgba(0, 45, 114, 0.4); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; z-index: 2000; }
-        .modal-edit-card { background: white; padding: 30px; border-radius: 24px; border: 1px solid #e2e8f0; width: 550px; text-align: left; box-shadow: 0 10px 30px rgba(0,0,0,0.1); }
-        .modal-edit-card h3 { color: #002d72; font-weight: 800; font-size: 1.2rem; margin: 0 0 20px 0; }
-        .edit-form-layout { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
-        .edit-group { display: flex; flex-direction: column; gap: 6px; }
-        .edit-group label { font-size: 0.68rem; font-weight: 800; color: #002d72; letter-spacing: 0.5px; }
-        .edit-group input, .edit-group select, .edit-group textarea { padding: 10px 12px; border: 1px solid #cbd5e1; border-radius: 8px; background: #f8fafc; font-size: 0.88rem; font-weight: 600; color: #1e293b; outline: none; }
-        .edit-group textarea { height: 90px; resize: none; }
-        .full-width { grid-column: 1 / -1; }
-        .modal-actions-row { grid-column: 1 / -1; display: flex; justify-content: flex-end; gap: 10px; margin-top: 10px; }
-        .btn-cancel { background: #f1f5f9; color: #475569; border: none; padding: 10px 18px; border-radius: 8px; font-weight: 700; cursor: pointer; font-size: 0.85rem; }
-        .btn-save-confirm { background: #002d72; color: white; border: none; padding: 10px 18px; border-radius: 8px; font-weight: 700; cursor: pointer; font-size: 0.85rem; box-shadow: 0 4px 10px rgba(0,45,114,0.15); }
+        .btn-primary,
+        .btn-back {
+          border: none;
+          padding: 14px 22px;
+          border-radius: 22px;
+          cursor: pointer;
+          font-weight: 700;
+          font-size: 1rem;
+          font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+          transition: background 0.3s ease, box-shadow 0.3s ease;
+          box-shadow: 0 4px 16px rgba(0,74,153,0.5);
+        }
 
-        .empty-state { grid-column: 1 / -1; text-align: center; padding: 40px; color: #94a3b8; font-style: italic; background: white; border-radius: 20px; border: 1px dashed #cbd5e1; }
-        @media (max-width: 600px) { .solicitudes-grid { grid-template-columns: 1fr; } .modal-edit-card { width: 90%; } .edit-form-layout { grid-template-columns: 1fr; } }
+        .btn-primary {
+          background: #ffd700;
+          color: #004a99;
+        }
+
+        .btn-primary:hover,
+        .btn-primary:focus {
+          background: #ffec7a;
+          box-shadow: 0 6px 20px #ffec7aaa;
+          outline: none;
+        }
+
+        .btn-back {
+          background: #1e40af;
+          color: white;
+          box-shadow: 0 4px 16px #1e40afcc;
+        }
+
+        .btn-back:hover,
+        .btn-back:focus {
+          background: #1e3a8a;
+          box-shadow: 0 6px 20px #1e3a8acc;
+          outline: none;
+        }
+
+        .grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
+          gap: 26px;
+        }
+
+        .card {
+          background: linear-gradient(145deg, #ffffff, #d5e6ff);
+          border-radius: 25px;
+          padding: 28px 32px 36px 32px;
+          box-shadow:
+            8px 8px 20px rgba(0, 74, 153, 0.15),
+            -8px -8px 20px rgba(255, 255, 255, 0.9);
+          position: relative;
+          display: flex;
+          flex-direction: column;
+          color: #003366;
+          font-weight: 600;
+          transition: transform 0.25s ease, box-shadow 0.25s ease;
+          user-select: text;
+        }
+
+        .card:hover {
+          transform: translateY(-6px);
+          box-shadow:
+            12px 12px 28px rgba(0, 74, 153, 0.3),
+            -12px -12px 28px rgba(255, 255, 255, 1);
+          z-index: 3;
+        }
+
+        .card.cerrado {
+          background: #f7f9fc;
+          color: #64748b;
+          box-shadow: inset 2px 2px 10px #cbd5e135;
+          user-select: none;
+        }
+
+        .card.cerrado:hover {
+          cursor: default;
+          transform: none;
+          box-shadow: inset 2px 2px 10px #cbd5e135;
+        }
+
+        .card-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-bottom: 16px;
+          font-size: 1.15rem;
+          user-select: none;
+        }
+
+        .card-header h3 {
+          font-weight: 800;
+          letter-spacing: 0.03em;
+          user-select: text;
+        }
+
+        .estado {
+          color: white;
+          padding: 8px 18px;
+          border-radius: 22px;
+          font-size: 13px;
+          font-weight: bold;
+          box-shadow: 0 1px 8px rgb(0 0 0 / 0.2);
+          user-select: none;
+          text-transform: capitalize;
+        }
+
+        .priority {
+          background: #eff6ff;
+          padding: 12px;
+          border-radius: 16px;
+          color: #1d4ed8;
+          font-weight: 700;
+          margin: 12px 0;
+          user-select: none;
+        }
+
+        h2 {
+          margin: 18px 0 14px 0;
+          font-weight: 900;
+          font-size: 1.25rem;
+          color: #004a99;
+          letter-spacing: 0.02em;
+        }
+
+        p {
+          margin: 6px 0;
+          line-height: 1.4;
+          user-select: text;
+          font-size: 1rem;
+          color: #344054;
+        }
+
+        .description {
+          background: #f0f5ff;
+          padding: 16px;
+          border-radius: 16px;
+          margin-top: 8px;
+          color: #1e40af;
+          font-weight: 600;
+          user-select: text;
+        }
+
+        .dates p {
+          font-size: 0.93rem;
+          font-weight: 600;
+          color: #64748b;
+          margin: 3px 0;
+          user-select: none;
+        }
+
+        .lawyer-box,
+        .veredicto-box,
+        .rechazo-box,
+        .docs-container {
+          margin-top: 22px;
+          padding: 18px 22px;
+          background: #e5edff;
+          border-radius: 18px;
+          box-shadow: inset 0 0 10px #a1b9ffab;
+          font-weight: 700;
+          font-size: 1rem;
+          color: #003366;
+          user-select: text;
+        }
+
+        .rechazo-box {
+          background: #ffe7e7;
+          box-shadow: inset 0 0 10px #fca5a5bb;
+          color: #991b1b;
+        }
+
+        .docs-container h4 {
+          margin-bottom: 12px;
+          font-weight: 800;
+          font-size: 1.05rem;
+          color: #003366;
+          user-select: none;
+        }
+
+        .doc-btn {
+          width: 100%;
+          margin-top: 10px;
+          border: none;
+          background: #147ade;
+          color: white;
+          font-weight: 700;
+          font-size: 1rem;
+          padding: 12px 18px;
+          border-radius: 18px;
+          cursor: pointer;
+          transition: background-color 0.3s ease, box-shadow 0.3s ease;
+          user-select: none;
+          font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+          box-shadow: 0 6px 24px rgba(20, 122, 222, 0.45);
+        }
+
+        .doc-btn:hover,
+        .doc-btn:focus {
+          background: #0f6bca;
+          box-shadow: 0 8px 30px rgba(15, 107, 202, 0.75);
+          outline: none;
+        }
+
+        .actions {
+          display: flex;
+          gap: 14px;
+          margin-top: 24px;
+          flex-wrap: wrap;
+          user-select: none;
+          justify-content: center;
+        }
+
+        .actions button {
+          flex: 1 1 140px;
+          border: none;
+          border-radius: 22px;
+          padding: 14px 0;
+          cursor: pointer;
+          font-weight: 700;
+          font-size: 1.1rem;
+          color: white;
+          display: flex;
+          justify-content: center;
+          align-items: center;
+          gap: 12px;
+          transition: background-color 0.3s ease, box-shadow 0.3s ease,
+            transform 0.25s ease;
+          box-shadow: 0 6px 20px rgb(0 0 0 / 0.15);
+          font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        .actions button:active {
+          transform: scale(0.95);
+        }
+
+        .btn-edit {
+          background: #d97706;
+          box-shadow: 0 6px 20px #d9770600, 0 0 38px #d97706bb;
+        }
+
+        .btn-edit:hover,
+        .-edit:focus {
+          background: #b45309;
+          box-shadow: 0 7px 26px #b45309cc, 0 0 46px #b45309cc;
+          outline: none;
+        }
+
+        .btn-chat {
+          background: #7c3aed;
+          box-shadow: 0 6px 22px #7c3aedbb;
+        }
+
+        .btn-chat:hover,
+        .btn-chat:focus {
+          background: #5b21b6;
+          box-shadow: 0 8px 28px #5b21b6cc;
+          outline: none;
+        }
+
+        .btn-details {
+          background: #1e40af;
+          box-shadow: 0 6px 22px #1e40afbb;
+        }
+
+        .btn-details:hover,
+        .btn-details:focus {
+          background: #1e3a8a;
+          box-shadow: 0 8px 28px #1e3a8acc;
+          outline: none;
+        }
+
+        /* Overlay y modales */
+
+        .overlay {
+          position: fixed;
+          inset: 0;
+          background: rgba(0, 0, 0, 0.52);
+          display: flex;
+          justify-content: center;
+          align-items: center;
+          z-index: 1100;
+          user-select: none;
+          padding: 16px;
+        }
+
+        .modal {
+          background: white;
+          width: 100%;
+          max-width: 640px;
+          padding: 36px 44px;
+          border-radius: 28px;
+          box-shadow: 0 14px 48px rgba(0, 0, 0, 0.28);
+          max-height: 90vh;
+          overflow-y: auto;
+          color: #1e293b;
+          user-select: text;
+          font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+          animation: modalFadeIn 0.35s ease forwards;
+        }
+
+        @keyframes modalFadeIn {
+          from {
+            opacity: 0;
+            transform: translateY(-20px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+
+        .modal h2 {
+          margin-top: 0;
+          margin-bottom: 32px;
+          font-weight: 900;
+          color: #004a99;
+          font-size: 2rem;
+          user-select: text;
+          letter-spacing: 0.04em;
+        }
+
+        .modal h3 {
+          color: #004a99;
+          font-weight: 700;
+          margin-bottom: 18px;
+        }
+
+        .modal h4 {
+          margin-top: 24px;
+          font-weight: 700;
+          font-size: 1.2rem;
+          color: #004a99;
+        }
+
+        .modal p {
+          margin: 14px 0;
+          font-size: 1.1rem;
+          line-height: 1.6;
+          font-weight: 600;
+        }
+
+        .detail-box {
+          background: #f0f5ff;
+          padding: 18px 24px;
+          border-radius: 22px;
+          color: #003366;
+          font-weight: 600;
+          user-select: text;
+          box-shadow: 0 4px 14px #9fc9ffcc;
+          white-space: pre-wrap;
+        }
+
+        .veredicto-box {
+          background: #dbe9ff;
+          border-radius: 22px;
+          padding: 18px 24px;
+          margin-top: 12px;
+          font-size: 1.05rem;
+          color: #003366;
+          font-weight: 700;
+          box-shadow: 0 4px 16px #a1b9ffbb;
+          white-space: pre-wrap;
+        }
+
+        .rechazo-box {
+          background: #ffe7e7;
+          color: #8a1b1b;
+          border-radius: 22px;
+          padding: 18px 24px;
+          margin-top: 12px;
+          font-size: 1.05rem;
+          font-weight: 700;
+          box-shadow: 0 4px 16px #fca5a5bb;
+          white-space: pre-wrap;
+        }
+
+        /* Formulario edición */
+
+        .form {
+          display: flex;
+          flex-direction: column;
+          gap: 18px;
+          margin-bottom: 10px;
+        }
+
+        input,
+        textarea,
+        select {
+          padding: 16px 20px;
+          border-radius: 24px;
+          border: 2px solid #a5b4fc;
+          font-size: 1.1rem;
+          font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+          transition: border-color 0.3s ease;
+          box-shadow: inset 0 0 8px #bbc9ffcc;
+          user-select: text;
+        }
+
+        input:focus,
+        textarea:focus,
+        select:focus {
+          border-color: #3b82f6;
+          outline: none;
+          box-shadow: 0 0 16px #3b82f6aa;
+        }
+
+        .actions-form {
+          display: flex;
+          gap: 16px;
+        }
+
+        .btn-cancel,
+        .btn-save,
+        .btn-close {
+          border: none;
+          padding: 14px 40px;
+          border-radius: 28px;
+          color: white;
+          cursor: pointer;
+          font-weight: 700;
+          font-size: 1.15rem;
+          transition: background-color 0.3s ease, box-shadow 0.3s ease;
+          user-select: none;
+          font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+          flex: 1;
+        }
+
+        .btn-cancel {
+          background: #64748b;
+          box-shadow: 0 5px 20px #64748bcc;
+        }
+
+        .btn-cancel:hover,
+        .btn-cancel:focus {
+          background: #475569;
+          outline: none;
+          box-shadow: 0 7px 28px #475569cc;
+        }
+
+        .btn-save {
+          background: #004a99;
+          box-shadow: 0 7px 25px #004a99cc;
+        }
+
+        .btn-save:hover,
+        .btn-save:focus {
+          background: #003366;
+          outline: none;
+          box-shadow: 0 10px 35px #003366cc;
+        }
+
+        .btn-close {
+          background: #dc2626;
+          margin-top: 28px;
+          box-shadow: 0 7px 28px #dc2626cc;
+          width: 100%;
+        }
+
+        .btn-close:hover,
+        .btn-close:focus {
+          background: #991b1b;
+          outline: none;
+          box-shadow: 0 10px 36px #991b1bcc;
+        }
       `}</style>
     </div>
   );
